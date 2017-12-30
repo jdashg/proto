@@ -324,13 +324,12 @@ function assemble(text) {
          let val = gTokenVals[arg];
          if (val === undefined) {
             val = Number(arg);
-            if (!Number.isInteger(val)) {
+            if (val != val) {
                console.error('Failed to parse arg: ' + arg);
             }
          }
          opWords.push(val);
       }
-
 
       for (const arg of op.resArgs) {
          pushArg(arg);

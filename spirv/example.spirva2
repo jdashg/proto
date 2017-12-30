@@ -4,14 +4,14 @@
 ; Bound:     63
 ; Schema:    0
 
-               OpCapability Shader
+               OpCapability Capability.Shader
           %1 = OpExtInstImport "GLSL.std.450"
-               OpMemoryModel Logical GLSL450
-               OpEntryPoint Fragment %4 "main" %31 %33 %42 %57
-               OpExecutionMode %4 OriginLowerLeft
+               OpMemoryModel AddressingModel.Logical MemoryModel.GLSL450
+               OpEntryPoint ExecutionModel.Fragment %4 "main" %31 %33 %42 %57
+               OpExecutionMode %4 ExecutionMode.OriginLowerLeft
 
 ; Debug information
-               OpSource GLSL 450
+               OpSource SourceLanguage.GLSL 450
                OpName %4 "main"
                OpName %9 "scale"
                OpName %17 "S"
@@ -29,24 +29,24 @@
                OpName %57 "multiplier"
 
 ; Annotations (non-debug)
-               OpDecorate %15 ArrayStride 16
-               OpMemberDecorate %17 0 Offset 0
-               OpMemberDecorate %17 1 Offset 16
-               OpMemberDecorate %17 2 Offset 96
-               OpMemberDecorate %18 0 Offset 0
-               OpMemberDecorate %18 1 Offset 112
-               OpDecorate %18 Block
-               OpDecorate %20 DescriptorSet 0
-               OpDecorate %42 NoPerspective
+               OpDecorate %15 Decoration.ArrayStride 16
+               OpMemberDecorate %17 0 Decoration.Offset 0
+               OpMemberDecorate %17 1 Decoration.Offset 16
+               OpMemberDecorate %17 2 Decoration.Offset 96
+               OpMemberDecorate %18 0 Decoration.Offset 0
+               OpMemberDecorate %18 1 Decoration.Offset 112
+               OpDecorate %18 Decoration.Block
+               OpDecorate %20 Decoration.DescriptorSet 0
+               OpDecorate %42 Decoration.NoPerspective
 
 ; All types, variables, and constants
           %2     = OpTypeVoid
           %3     = OpTypeFunction %2                        ; void ()
           %6     = OpTypeFloat 32                         ; 32-bit float
           %7     = OpTypeVector %6 4                      ; vec4
-          %8     = OpTypePointer Function %7              ; function-local vec4*
-         %10  %6 = OpConstant 1
-         %11  %6 = OpConstant 2
+          %8     = OpTypePointer StorageClass.Function %7              ; function-local vec4*
+         %10  %6 = OpConstant 0x3f800000
+         %11  %6 = OpConstant 0x40000000
          %12  %7 = OpConstantComposite %10 %10 %11 %10 ; vec4(1.0, 1.0, 2.0, 1.0)
          %13     = OpTypeInt 32 0                         ; 32-bit int, sign-less
          %14 %13 = OpConstant 5
@@ -54,34 +54,34 @@
          %16     = OpTypeInt 32 1
          %17     = OpTypeStruct %13 %15 %16
          %18     = OpTypeStruct %17 %13
-         %19     = OpTypePointer Uniform %18
-         %20 %19 = OpVariable Uniform
+         %19     = OpTypePointer StorageClass.Uniform %18
+         %20 %19 = OpVariable StorageClass.Uniform
          %21 %16 = OpConstant 1
-         %22     = OpTypePointer Uniform %13
+         %22     = OpTypePointer StorageClass.Uniform %13
          %25     = OpTypeBool
          %26 %13 = OpConstant 0
-         %30     = OpTypePointer Output %7
-         %31 %30 = OpVariable Output
-         %32     = OpTypePointer Input %7
-         %33 %32 = OpVariable Input
+         %30     = OpTypePointer StorageClass.Output %7
+         %31 %30 = OpVariable StorageClass.Output
+         %32     = OpTypePointer StorageClass.Input %7
+         %33 %32 = OpVariable StorageClass.Input
          %35 %16 = OpConstant 0
          %36 %16 = OpConstant 2
-         %37     = OpTypePointer Uniform %7
-         %42 %32 = OpVariable Input
-         %47     = OpTypePointer Function %16
+         %37     = OpTypePointer StorageClass.Uniform %7
+         %42 %32 = OpVariable StorageClass.Input
+         %47     = OpTypePointer StorageClass.Function %16
          %55 %16 = OpConstant 4
-         %57 %32 = OpVariable Input
+         %57 %32 = OpVariable StorageClass.Input
 
 ; All functions
-          %4  %2 = OpFunction None %3                  ; main()
+          %4  %2 = OpFunction FunctionControl.None %3                  ; main()
           %5     = OpLabel
-          %9  %8 = OpVariable Function
-         %48 %47 = OpVariable Function
+          %9  %8 = OpVariable StorageClass.Function
+         %48 %47 = OpVariable StorageClass.Function
                    OpStore %9 %12
          %23 %22 = OpAccessChain %20 %21              ; location of cond
          %24 %13 = OpLoad %23                         ; load 32-bit int from cond
          %27 %25 = OpINotEqual %24 %26                ; convert to bool
-                   OpSelectionMerge %29 None              ; structured if
+                   OpSelectionMerge %29 SelectionControl.None              ; structured if
                    OpBranchConditional %27 %28 %41        ; if cond
          %28     = OpLabel                                ; then
          %34  %7 = OpLoad %33
@@ -101,7 +101,7 @@
                    OpStore %48 %35
                    OpBranch %49
          %49     = OpLabel
-                   OpLoopMerge %51 %52 None               ; structured loop
+                   OpLoopMerge %51 %52 LoopControl.None               ; structured loop
                    OpBranch %53
          %53     = OpLabel
          %54 %16 = OpLoad %48
