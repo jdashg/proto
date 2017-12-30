@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html>
+   <head>
+      <meta charset='utf-8'>
+   </head>
+   <body>
+      <style>
+html {
+   height: 100%;
+   font-family: sans-serif;
+}
+body {
+   margin: 0px;
+   display: flex;
+   flex-direction: row;
+   height: 100%;
+}
+#eAsmText {
+   font-family: monospace;
+   white-space: pre;
+   xxxflex: auto;
+   width: 60em;
+   resize: horizontal;
+   overflow: scroll;
+}
+#eBinStream {
+   font-family: monospace;
+   white-space: pre;
+   min-width: 3em;
+   flex: auto;
+   resize: horizontal;
+   overflow: scroll;
+}
+      </style>
+      <textarea id='eAsmText'></textarea>
+      <div id='eBinStream'></div>
+      <script>
+
+const SPIRV_MAGIC_NUMBER = 0x07230203;
+const SPIRV_MAJVER = 1;
+const SPIRV_MINVER = 0;
+const GENERATOR_MAGIC_NUMBER = 0x1eaf0001;
+
+let gTokenVals = {};
+function AddTokenVal(k, v) {
+   console.assert(!(k in gTokenVals), 'Duplicate in gTokenVals: ' + k);
+   gTokenVals[k] = v;
+}
+function GetTokenVal(k, orDefault=k) {
+   let ret = gTokenVals[k];
+   if (ret === undefined) {
+      ret = orDefault;
+   }
+   return ret;
+}
+
+let gSpirv, gGlsl, gLib;
+async function init() {
+   const urls = [
+      'spirv.core.grammar.json',
+      'extinst.glsl.std.450.grammar.json',
+   ];
+   const loads = urls.map(x => fetch(x).then(y => y.json()));
+   [gSpirv, gGlsl] = await Promise.all(loads);
+
+   console.assert(gSpirv.magic_number == SPIRV_MAGIC_NUMBER, 'gSpirv.magic_number');
+
+   for (const w of [gSpirv, gGlsl]) {
+      for (const x of w.instructions) {
+         AddTokenVal(x.opname, x.opcode);
+      }
+   }
+
+   for (const x of gSpirv.operand_kinds) {
+      if (x.enumerants) {
+         for (const y of x.enumerants) {
+            AddTokenVal(x.kind + '.' + y.enumerant, y.value);
+         }
+      }
+   }
+
+   gLib = new OpLibrary();
+   for (const x of gSpirv.instructions) {
+      gLib.add(x);
+   }
+
+   const asm = await fetch('example.spirva2').then(x => x.text());
+   eAsmText.value = asm;
+   onAsmUpdated();
+}
+eAsmText.value = '';
+onAsmUpdated();
+init();
+
+function onAsmUpdated() {
+   const asm = eAsmText.value;
+   const chunks = assemble(asm);
+   const binText = chunks.map(c => {
+      return c.map(n => {
+         return '0x' + n.toString(16);
+      }).join(' ');
+   }).join('\n');
+   eBinStream.textContent = binText;
+}
+
+class OpLibrary {
+   constructor() {
+      this.byCode = {};
+   }
+
+   add(instruction) {
+      this.byCode[instruction.opcode] = instruction;
+   }
+
+   lint(op) {
+      function Error(x) {
+         console.error('L' + op.lineNum + ' `' + op.opcode + '`: ' + x);
+      }
+      const opcode = GetTokenVal(op.opcode);
+      const info = this.byCode[opcode];
+      if (info === undefined) {
+         Error('Unrecognized opcode.');
+         return;
+      }
+      let operands = info.operands;
+      if (operands === undefined) {
+         operands = [];
+      }
+
+      let resArgsPos = 0;
+      let argsPos = 0;
+      for (const cur of operands) {
+         if (cur.kind == 'IdResultType') {
+            resArgsPos += 1;
+            continue;
+         }
+         if (cur.kind == 'IdResult') {
+            resArgsPos += 1;
+            continue;
+         }
+      }
+
+      if (resArgsPos != op.resArgs.length) {
+         Error('Mismatched resArgs.');
+         console.log(resArgsPos, op.resArgs);
+      }
+      if (argsPos != op.args.length) {
+         //Error('Mismatched args.');
+      }
+   }
+};
+
+function nextToken(text, start) {
+   const first = text[start];
+   let pos = start + 1;
+
+   function tokenUntil(fnTest) {
+      while (pos < text.length && !fnTest(text[pos])) {
+         pos += 1;
+      }
+      return text.substring(start, pos);
+   }
+
+   if (first == ' ')
+      return tokenUntil(x => x != ' ');
+
+   if (first == ';')
+      return tokenUntil(x => x == '\n');
+
+   if (first == '\n')
+      return first;
+
+   if (first == '"') {
+      function numBackslashes(from) {
+         let ret = 0;
+         while (text[from-ret-1] == '\\') {
+            ret += 1;
+         }
+         return ret;
+      }
+      function isEnd() {
+         if (text[pos] != '"')
+            return false;
+         const num = numBackslashes(pos);
+         const isEscaped = (num % 2 == 1);
+         return !isEscaped;
+      }
+      while (pos < text.length && !isEnd()) {
+         pos += 1;
+      }
+      return text.substring(start, pos+1);
+   }
+
+   return tokenUntil(x => (x == ' ' || x == '\n'));
+}
+
+function parseLine(text, start) {
+   let pos = start;
+   const tokens = [];
+   while (pos < text.length) {
+      const cur = nextToken(text, pos);
+      pos += cur.length;
+      if (cur[0] == '\n')
+         break;
+
+      if (cur[0] == ' ' || cur[0] == ';')
+         continue;
+
+      tokens.push(cur);
+   }
+   return [tokens, pos];
+}
+
+function SpirvOp(lineNum, opcode, resArgs, args) {
+   this.lineNum = lineNum;
+   this.opcode = opcode;
+   this.resArgs = resArgs;
+   this.args = args;
+}
+
+function* parseOps(text) {
+   let lineNum = 0;
+   let nextLineOffset = 0;
+   while (nextLineOffset < text.length) {
+      lineNum += 1;
+      const lineOffset = nextLineOffset;
+      let tokens;
+      [tokens, nextLineOffset] = parseLine(text, nextLineOffset);
+      if (!tokens.length)
+         continue;
+
+      let resArgs, opcode, args;
+      let eqPos = 0;
+      while (eqPos < tokens.length) {
+         if (tokens[eqPos] == '=') {
+            resArgs = tokens.slice(0, eqPos).reverse();
+            opcode = tokens[eqPos+1];
+            args = tokens.slice(eqPos+2);
+            break;
+         }
+         eqPos += 1;
+      }
+      if (eqPos == tokens.length) {
+         resArgs = [];
+         opcode = tokens[0];
+         args = tokens.slice(1);
+      }
+      const op = new SpirvOp(lineNum, opcode, resArgs, args);
+      //console.log(JSON.stringify(op));
+      yield op;
+   }
+}
+
+function* toCodePoints(str) {
+   let i = 0;
+   while (i < str.length) {
+      const codepoint = str.codePointAt(i);
+      yield codepoint;
+      const restr = String.fromCodePoint(codepoint);
+      i += restr.length;
+   }
+}
+
+function pushUtf8(arr, codepoint) {
+   if (codepoint <= 0x7f)
+      return arr.push(codepoint);
+   const a = codepoint & 0x7ff;
+   codepoint >>= 6;
+   const b = codepoint & 0x7ff;
+   codepoint >>= 6;
+   const c = codepoint & 0x7ff;
+   codepoint >>= 6;
+   const d = codepoint & 0x7;
+   if (codepoint <= 0x7ff)
+      return arr.push(0b11000000 | b,
+                      0b10000000 | a);
+   if (codepoint <= 0xffff)
+      return arr.push(0b11100000 | c,
+                      0b10000000 | b,
+                      0b10000000 | a);
+   return arr.push(0b11110000 | d,
+                   0b10000000 | c,
+                   0b10000000 | b,
+                   0b10000000 | a);
+}
+
+function assemble(text) {
+   const chunks = [];
+   chunks.push([
+      SPIRV_MAGIC_NUMBER,
+      SPIRV_MAJVER << 16 | SPIRV_MINVER << 8,
+      GENERATOR_MAGIC_NUMBER,
+      1024*1024*1024, // Make up a bound for now.
+      0, // schema
+   ]);
+   for (const op of parseOps(text)) {
+      //console.log(JSON.stringify(op));
+      gLib.lint(op);
+      let opWords = [GetTokenVal(op.opcode)];
+      function pushArg(arg) {
+         if (arg[0] == '%') {
+            opWords.push(Number(arg.slice(1)));
+            return;
+         }
+         if (arg[0] == '"') {
+            let pendingWord = 0;
+            const str = arg.slice(1, -1);
+
+            const utf8Bytes = [];
+            for (const x of toCodePoints(str)) {
+               pushUtf8(utf8Bytes, x);
+            }
+            utf8Bytes.push(0);
+            while (utf8Bytes.length % 4 != 0) {
+               utf8Bytes.push(0);
+            }
+            const bytes = new Uint8Array(utf8Bytes);
+            const words = new Uint32Array(bytes.buffer);
+            for (const x of words) {
+               opWords.push(x);
+            }
+            return;
+         }
+         let val = gTokenVals[arg];
+         if (val === undefined) {
+            val = Number(arg);
+            if (!Number.isInteger(val)) {
+               console.error('Failed to parse arg: ' + arg);
+            }
+         }
+         opWords.push(val);
+      }
+
+
+      for (const arg of op.resArgs) {
+         pushArg(arg);
+      }
+      for (const arg of op.args) {
+         pushArg(arg);
+      }
+      opWords[0] |= opWords.length << 16;
+      chunks.push(opWords);
+   }
+   return chunks;
+}
+      </script>
+   </body>
+</html>
