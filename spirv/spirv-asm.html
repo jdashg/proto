@@ -6,19 +6,26 @@
    <body>
       <style>
 html {
+   width: 100%;
    height: 100%;
    font-family: sans-serif;
 }
 body {
+   width: 100%;
+   height: 100%;
    margin: 0px;
    display: flex;
+   flex-direction: column;
+}
+#eMidPanels {
+   width: 100%;
+   flex: auto;
+   display: flex;
    flex-direction: row;
-   height: 100%;
 }
 #eAsmText {
    font-family: monospace;
    white-space: pre;
-   xxxflex: auto;
    width: 60em;
    resize: horizontal;
    overflow: scroll;
@@ -28,12 +35,17 @@ body {
    white-space: pre;
    min-width: 3em;
    flex: auto;
-   resize: horizontal;
    overflow: scroll;
 }
       </style>
-      <textarea id='eAsmText'></textarea>
-      <div id='eBinStream'></div>
+      <div>
+         <input type='button' value='Assemble' onclick='refreshAssembled()'>
+         <input type='button' value='Download' onclick='downloadAssembled()'>
+      </div>
+      <div id='eMidPanels'>
+         <textarea id='eAsmText'></textarea>
+         <div id='eBinStream'></div>
+      </div>
       <script>
 
 const SPIRV_MAGIC_NUMBER = 0x07230203;
@@ -86,15 +98,20 @@ async function init() {
 
    const asm = await fetch('example.spirva2').then(x => x.text());
    eAsmText.value = asm;
-   onAsmUpdated();
+   refreshAssembled();
 }
 eAsmText.value = '';
-onAsmUpdated();
+refreshAssembled();
 init();
 
-function onAsmUpdated() {
+function assembleCurrent() {
    const asm = eAsmText.value;
    const chunks = assemble(asm);
+   return chunks;
+}
+
+function refreshAssembled() {
+   const chunks = assembleCurrent();
    const binText = chunks.map(c => {
       return c.map(n => {
          return '0x' + n.toString(16);
@@ -102,6 +119,7 @@ function onAsmUpdated() {
    }).join('\n');
    eBinStream.textContent = binText;
 }
+
 
 class OpLibrary {
    constructor() {
@@ -341,6 +359,34 @@ function assemble(text) {
       chunks.push(opWords);
    }
    return chunks;
+}
+
+function download(blob, name) {
+   const url = URL.createObjectURL(blob);
+   const a = document.createElement('a');
+   document.body.appendChild(a);
+   a.href = url;
+   a.download = name;
+   a.click();
+   document.body.removeChild(a);
+   URL.revokeObjectURL(url);
+}
+
+function downloadAssembled() {
+   const chunks = assembleCurrent();
+   let wordCount = 0;
+   chunks.forEach(x => {
+      wordCount += x.length;
+   });
+   const words = new Uint32Array(wordCount);
+
+   let pos = 0;
+   chunks.forEach(x => {
+      words.set(x, pos);
+      pos += x.length;
+   });
+   const blob = new Blob([words], {type: 'application/spirv'});
+   download(blob, 'a.spirv');
 }
       </script>
    </body>
