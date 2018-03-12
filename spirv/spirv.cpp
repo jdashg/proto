@@ -3,14 +3,14 @@
 #include <memory>
 #include <vector>
 
+#include "spirv.hpp11"
+
 template<typename T> using sp = std::shared_ptr<T>;
 template<typename T> using up = std::unique_ptr<T>;
 typedef uint8_t u8;
 typedef uint32_t u32;
 typedef int64_t i64;
 typedef uint64_t u64;
-
-const u32 SPIRV_MAGIC_LENDIAN = 0x07230203;
 
 #define let const auto
 
@@ -121,6 +121,12 @@ struct SpirvOp
 /*static*/ sp<SpirvOp>
 SpirvOp::Parse(const u32 opcode, const Range<const u32>& data)
 {
+   switch ((spv::Op)opcode) {
+   case spv::Op::OpNop:
+      ASSERT(data.begin == data.end);
+      return nullptr;
+
+   }
    return nullptr;
 }
 
@@ -144,8 +150,9 @@ SpirvModule::Parse(const u64 size, const u32* const data)
    let range = MakeRange(data, size);
    auto itr = range.begin;
    let spirvMagic = itr[0];
-   ASSERT(spirvMagic == SPIRV_MAGIC_LENDIAN);
+   ASSERT(spirvMagic == spv::MagicNumber);
    let spirvVersion = itr[1];
+   ASSERT(spirvVersion <= spv::Version);
    let generatorMagic = itr[2];
    let idBounds = itr[3];
    let schema = itr[4];
@@ -155,8 +162,8 @@ SpirvModule::Parse(const u64 size, const u32* const data)
    while (itr != range.end) {
       let opHead = *itr;
       //printf("opHead: %x\n", opHead);
-      let opcode = opHead & 0xffff;
-      let opWords = opHead >> 16;
+      let opcode = opHead & spv::OpCodeMask;
+      let opWords = opHead >> spv::WordCountShift;
       ASSERT(opWords);
 
       let itrArgsEnd = itr + opWords;
