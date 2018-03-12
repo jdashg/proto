@@ -114,6 +114,7 @@ function assembleCurrent() {
 }
 
 function refreshAssembled() {
+   console.log('Assembling...');
    const chunks = assembleCurrent();
    const binText = chunks.map(c => {
       return c.map(n => {
