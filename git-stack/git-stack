@@ -1,0 +1,70 @@
+#!/bin/env python3
+
+import os
+import subprocess
+import sys
+
+def git_run(*args, **kw):
+    return subprocess.run(['git'] + list(args), check=True, **kw)
+
+def git_line(*args, **kw):
+    p = git_run(*args, **kw, stdout=subprocess.PIPE)
+    return p.stdout.splitlines()[0]
+
+def read_file(path, flags='rb'):
+    with open(path, flags) as f:
+        return f.read()
+
+
+if __name__ == '__main__':
+    print(sys.argv)
+
+    assert git_line('rev-parse', '--is-bare-repository') == b'false'
+    stack_dir = git_line('rev-parse', '--git-path', 'stack').decode()
+
+    if not os.path.isdir(stack_dir):
+        os.mkdir(stack_dir)
+
+    try:
+        cmd = sys.argv[1]
+    except IndexError:
+        cmd = 'status'
+
+    HEAD = git_line('rev-parse', 'HEAD')
+
+    BASE_path = os.path.join(stack_dir, 'BASE')
+    try:
+        BASE = read_file(BASE_path).splitlines()[0]
+    except OSError:
+        BASE = HEAD
+
+    if cmd == 'status':
+        try:
+            BASE = read_file(os.path.join(stack_dir, 'BASE')).splitlines()[0]
+        except OSError:
+            BASE = HEAD
+    elif cmd == 'new':
+        args = sys.argv[2:]
+        message = None
+        while True:
+            try:
+                arg = args.pop(0)
+            except IndexError:
+                break
+            if arg == '-m' or arg == '--message':
+                message = args.pop(0)
+                continue
+            (patch_name,) = args
+
+        if message == None:
+            message = patch_name
+
+        if HEAD == BASE:
+            with open(BASE_path, 'wb') as f:
+                f.write(HEAD)
+        git_run('commit', '--allow-empty', '-a', '-m', '[mq] ' + message)
+
+
+
+
+

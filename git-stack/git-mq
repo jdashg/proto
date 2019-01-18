@@ -1,0 +1,89 @@
+#!/bin/env python3
+
+import os
+import subprocess
+import sys
+
+def git_run(*args, **kw):
+    return subprocess.run(['git'] + list(args), check=True, **kw)
+
+def git_line(*args, **kw):
+    p = git_run(*args, **kw, stdout=subprocess.PIPE)
+    return p.stdout.splitlines()[0]
+
+def read_file(path, flags='rb'):
+    with open(path, flags) as f:
+        return f.read()
+
+
+if __name__ == '__main__':
+    print(sys.argv)
+
+    assert git_line('rev-parse', '', '--is-bare-repository') == b'false'
+    stack_dir = git_line('rev-parse', '--git-path', 'mq').decode()
+
+    if not os.path.isdir(stack_dir):
+        os.mkdir(stack_dir)
+
+    try:
+        cmd = sys.argv[1]
+    except IndexError:
+        cmd = 'status'
+
+    HEAD = git_line('rev-parse', 'HEAD')
+
+    BASE_path = os.path.join(stack_dir, 'BASE')
+    try:
+        BASE = read_file(BASE_path).splitlines()[0]
+    except OSError:
+        BASE = HEAD
+
+
+    def refresh(patch_name):
+        p = git_run('format-patch', '-k', '--stdout', stdout=subprocess.PIPE)
+
+
+
+    if cmd == 'status':
+        try:
+            BASE = read_file(os.path.join(stack_dir, 'BASE')).splitlines()[0]
+        except OSError:
+            BASE = HEAD
+    elif cmd in ['new', 'refresh']:
+        src_args = sys.argv[2:]
+        dest_args = ['commit', '--allow-empty', '-a']
+        message = None
+        while True:
+            try:
+                arg = args.pop(0)
+            except IndexError:
+                break
+            if arg in ['-m', '--message']:
+                message = args.pop(0)
+                continue
+            if arg in ['-e', '--edit']:
+                dest_args.append(arg)
+                continue
+            if cmd == 'new':
+                patch_name = args.pop(0)
+                if message == None:
+                    message = patch_name
+            else:
+                dest_args.append('--amend')
+            assert not args
+            break
+        if message:
+            dest_args += ['-m', '[mq] ' + message]
+
+        if HEAD == BASE:
+            with open(BASE_path, 'wb') as f:
+                f.write(HEAD)
+
+        git_run(*dest_args)
+
+
+
+
+
+
+
